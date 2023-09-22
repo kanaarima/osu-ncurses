@@ -1,8 +1,11 @@
 from typing import List, Dict
 from datetime import datetime
 from client import Client
+from kbhit import KBHit
+import commands
 import curses
 import time
+import keys
 
 class View():
     
@@ -12,6 +15,9 @@ class View():
     def render(self, stdscr):
         stdscr.addstr(0,0,"hello world")
         stdscr.refresh()
+
+    def handle_key(self, key: int):
+        pass
 
 class ChatView(View):
     
@@ -27,8 +33,28 @@ class ChatView(View):
             y+=1
         stdscr.refresh()
 
+class CommandPromptView(View):
+    
+    def __init__(self) -> None:
+        self.textbox = ""
+        self.done = False
+    
+    def render(self, stdscr):
+        y, x = stdscr.getmaxyx()
+        stdscr.addstr(y-2, 0, ">"+self.textbox.ljust(x-1, " "))
+    
+    def handle_key(self, key: int):
+        if key == keys.KEY_DELETE:
+            self.textbox = self.textbox[:-2]
+        elif key == keys.KEY_RETURN:
+            self.done = True
+        else:
+            self.textbox += chr(key)
+
 messages_views: Dict[str, View] = {}
 active_views: List[View] = []
+current_view = 0
+commandprompt = None
 
 def draw_status_bar(client: Client, stdscr):
     friends = list()
@@ -45,15 +71,21 @@ def draw_tabs(client: Client, stdscr):
         str += active_view.name + " "
     stdscr.addstr(y-1,0, str)
 
-
 def loop(client: Client, config: dict):
+    global current_view, commandprompt
     stdscr = curses.initscr()
     stdscr.clear()
     curses.noecho()
     curses.cbreak()
+    kbhit = KBHit()
+    curses.use_default_colors()
+    for i in range(0, curses.COLORS):
+        curses.init_pair(i, i, -1);
+
     #active_views.append(View())
     old_y, old_x = stdscr.getmaxyx()
     render_window = curses.newwin(old_y-1, old_x, 1, 0)
+    last_char = None
     while True:
         for messages in client.messages:
             if messages not in messages_views:
@@ -61,10 +93,45 @@ def loop(client: Client, config: dict):
                 active_views.append(view)
                 messages_views[messages] = view
         # TODO handle resize
-        stdscr.clear()
         draw_status_bar(client, stdscr)
         draw_tabs(client, stdscr)
-        stdscr.refresh()
+        char = None
+        if kbhit.kbhit():
+            char = stdscr.getch()
+        if char == keys.KEY_RIGHT:
+            current_view += 1
+            if current_view == len(active_views):
+                current_view = 0
+            stdscr.clear()
+            char = None
+        elif char == keys.KEY_LEFT:
+            current_view -= 1
+            if current_view == -1:
+                current_view = max(0,len(active_views)-1)
+            stdscr.clear()
+            char = None
+        elif char == keys.KEY_CONTROL_E:
+            if commandprompt:
+                commandprompt = None
+            else:
+                commandprompt = CommandPromptView()
+            stdscr.clear()
+            char = None
+        if char == last_char: # for some reason some keys repeats twice
+            char = None
+        last_char = char
+        if char:
+            if commandprompt:
+                commandprompt.handle_key(char)
+                if commandprompt.done:
+                    commands.handle_input(commandprompt.textbox, client=client)
+                    commandprompt = None
+                    stdscr.clear()
+            else:
+                active_views[current_view].handle_key(char)
+        if commandprompt:
+            commandprompt.render(stdscr)    
         if active_views:
-            active_views[0].render(render_window)
-        time.sleep(1)
+            active_views[current_view].render(render_window)
+        stdscr.refresh()
+        time.sleep(60/1000)

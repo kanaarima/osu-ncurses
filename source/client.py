@@ -21,10 +21,17 @@ class Client:
     def register_events(self):
         @self.game.events.register(ServerPackets.SEND_MESSAGE)
         def on_message(sender: Player, message: str, target: Union[Player, Channel]):
-            if target.name not in self.messages:
-                self.messages[target.name] = list()
-                self.targets[target.name] = target
-            self.messages[target.name].append((datetime.now(), message))
+            if type(target) == Channel:
+                if target.name not in self.messages:
+                    self.messages[target.name] = list()
+                    self.targets[target.name] = target
+                self.messages[target.name].append((datetime.now(), sender.name+": "+ message))
+            else:
+                if sender.name not in self.messages:
+                    self.messages[sender.name] = list()
+                    self.targets[sender.name] = sender
+                self.messages[sender.name].append((datetime.now(), sender.name+": "+ message))
+        
         @self.game.events.register(ServerPackets.CHANNEL_JOIN_SUCCESS)
         def on_channel_join(channel: Channel):
             if channel.name not in self.messages:

@@ -10,6 +10,7 @@ class Client:
     def __init__(self, username, password, server) -> None:
         self.game = Game(username, password, server=server)
         self.messages = {}
+        self.targets = {}
         self.register_events()
         self.loop()
     
@@ -22,9 +23,12 @@ class Client:
         def on_message(sender: Player, message: str, target: Union[Player, Channel]):
             if target.name not in self.messages:
                 self.messages[target.name] = list()
+                self.targets[target.name] = target
             self.messages[target.name].append((datetime.now(), message))
         @self.game.events.register(ServerPackets.CHANNEL_JOIN_SUCCESS)
         def on_channel_join(channel: Channel):
             if channel.name not in self.messages:
                 self.messages[channel.name] = list()
+                self.targets[channel.name] = channel
             self.messages[channel.name].append((datetime.now(), f"Joined {channel.name}"))
+            

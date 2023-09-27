@@ -25,13 +25,29 @@ class ChatView(View):
         self.name = message_key
         self.client = client
         self.message_key = message_key
+        self.textbox = ""
 
     def render(self, stdscr):
         y = 0
         for time, message in self.client.messages[self.message_key]:
             stdscr.addstr(y, 0, f"{time}: {message}")
             y+=1
+        y, x = stdscr.getmaxyx()
+        stdscr.addstr(y-2, 0, ">"+self.textbox.ljust(x-1, " "))
         stdscr.refresh()
+
+    def handle_key(self, key: int):
+        if key == keys.KEY_DELETE:
+            self.textbox = self.textbox[:-2]
+        elif key == keys.KEY_RETURN:
+            if not len(self.textbox):
+                return
+            self.client.targets[self.message_key].send_message(self.textbox)
+            self.client.messages[self.message_key].append((datetime.now(), self.textbox))
+            self.textbox = ""
+        else:
+            self.textbox += chr(key)
+
 
 class CommandPromptView(View):
     
@@ -78,6 +94,7 @@ def loop(client: Client, config: dict):
     curses.noecho()
     curses.cbreak()
     kbhit = KBHit()
+    curses.start_color()
     curses.use_default_colors()
     for i in range(0, curses.COLORS):
         curses.init_pair(i, i, -1);
